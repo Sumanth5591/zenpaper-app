@@ -1,0 +1,22 @@
+# Gradle caches and build outputs
+.gradle/
+build/
+app/build/
+captured/*
+
+# Local configuration (e.g. SDK path)
+local.properties
+
+# Kotlin / IDE settings
+.kotlin/
+.idea/
+*.iml
+.cxx/
+
+# Log files
+*.log
+
+# Android Studio / Device files
+*.apk
+*.ap_
+*.dex
