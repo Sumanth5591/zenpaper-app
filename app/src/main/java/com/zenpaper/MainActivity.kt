@@ -77,21 +77,12 @@ class MainActivity : ComponentActivity() {
     private fun requestIgnoreBatteryOptimizations() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
-                val intent = Intent().apply {
-                    action = Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
-                    data = Uri.parse("package:$packageName")
-                }
+                // Open standard system list of optimized apps (100% safe, legal, and policy-compliant)
+                val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
                 startActivity(intent)
+                Toast.makeText(this, "Please locate ZenPaper and select 'Don't Optimize' to ensure reliable background updates.", Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
-                // Settings action might be blocked on some custom OEM ROMs
-                try {
-                    val fallbackIntent = Intent().apply {
-                        action = Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
-                    }
-                    startActivity(fallbackIntent)
-                } catch (ex: Exception) {
-                    Toast.makeText(this, "Please whitelist ZenPaper in system battery optimization settings manually.", Toast.LENGTH_LONG).show()
-                }
+                Toast.makeText(this, "Please whitelist ZenPaper in system battery optimization settings manually.", Toast.LENGTH_LONG).show()
             }
         }
     }

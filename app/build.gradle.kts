@@ -8,6 +8,15 @@ android {
     namespace = "com.zenpaper"
     compileSdk = 34
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("../zenpaper.jks")
+            storePassword = "zenpaper123"
+            keyAlias = "zenpaper"
+            keyPassword = "zenpaper123"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.zenpaper"
         minSdk = 26
@@ -25,8 +34,11 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("release")
+            isCrunchPngs = false
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
