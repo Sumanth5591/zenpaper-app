@@ -18,6 +18,10 @@ jobs:
   build:
     name: Build Debug APK
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    env:
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx2g"
     
     steps:
       - name: Checkout code
@@ -28,6 +32,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+          cache: 'gradle'
       
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -42,7 +47,7 @@ jobs:
         run: chmod +x ./gradlew
       
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace --info
+        run: ./gradlew assembleDebug --stacktrace --no-daemon --max-workers=2
       
       - name: Build Release APK & AAB
         if: env.KEYSTORE_BASE64 != ''
@@ -93,6 +98,11 @@ jobs:
   lint:
     name: Lint & Security
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    env:
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx2g"
+    
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 17
@@ -100,6 +110,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+          cache: 'gradle'
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -111,7 +122,7 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
       - name: Run Lint
-        run: ./gradlew lintDebug --stacktrace
+        run: ./gradlew lintDebug --stacktrace --no-daemon --max-workers=2
       - name: Upload Lint Report
         uses: actions/upload-artifact@v4
         with:
