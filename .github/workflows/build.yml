@@ -30,9 +30,8 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          api-level: 34
-          ndk-version: r27c
-          build-tools-version: 34.0.0
+          packages: 'platforms;android-34 build-tools;34.0.0'
+          accept-android-sdk-licenses: true
       
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -99,7 +98,10 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          api-level: 34
+          packages: 'platforms;android-34'
+          accept-android-sdk-licenses: true
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
       - name: Run Lint
         run: ./gradlew lintDebug
       - name: Upload Lint Report
@@ -118,6 +120,13 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34'
+          accept-android-sdk-licenses: true
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
       - name: Check for vulnerable dependencies
         run: ./gradlew dependencyCheckAnalyze --info
       - name: Upload Dependency Check Report
