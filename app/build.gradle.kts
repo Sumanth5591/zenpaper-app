@@ -80,6 +80,10 @@ android {
     
     kotlin {
         jvmToolchain(17)
+        // Kotlin 2.0 + Gradle 9.0: set jvmTarget here instead of tasks.withType
+        compilerOptions {
+            jvmTarget.set("17")
+        }
     }
     buildFeatures {
         compose = true
@@ -88,10 +92,6 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
-    }
-    // Gradle 9.0 + Kotlin 2.0: use tasks.matching instead of withType
-    tasks.matching { it.name.contains("compile") && it.name.contains("Kotlin") }.configureEach {
-        (this as? org.jetbrains.kotlin.gradle.tasks.KotlinCompile)?.kotlinOptions?.jvmTarget = "17"
     }
 }
 
