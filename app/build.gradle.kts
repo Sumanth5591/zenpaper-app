@@ -89,11 +89,9 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
-    // Fix for Gradle 9.0 - use compilerOptions instead of deprecated kotlinOptions
-    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-        kotlinOptions {
-            jvmTarget = "17"
-        }
+    // Gradle 9.0 + Kotlin 2.0: use tasks.matching instead of withType
+    tasks.matching { it.name.contains("compile") && it.name.contains("Kotlin") }.configureEach {
+        (this as? org.jetbrains.kotlin.gradle.tasks.KotlinCompile)?.kotlinOptions?.jvmTarget = "17"
     }
 }
 
