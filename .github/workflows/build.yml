@@ -32,9 +32,9 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          api-level: 34
           cmdline-tools-version: 'latest'
-          accept-licenses: true
+          packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
+          accept-android-sdk-licenses: true
       
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -101,9 +101,9 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          api-level: 34
           cmdline-tools-version: 'latest'
-          accept-licenses: true
+          packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
+          accept-android-sdk-licenses: true
       - name: Make gradlew executable
         run: chmod +x ./gradlew
       - name: Run Lint
