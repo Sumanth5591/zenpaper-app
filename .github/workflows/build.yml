@@ -21,21 +21,20 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v4
       
       - name: Set up JDK 17
-        uses: actions/setup-java@v4.3.0
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
       
       - name: Setup Android SDK
-        run: |
-          echo "ANDROID_HOME=/usr/lib/android-sdk" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=/usr/lib/android-sdk" >> $GITHUB_ENV
-          # Install required packages
-          /usr/lib/android-sdk/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-34" "build-tools;34.0.0" "platform-tools"
-          yes | /usr/lib/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 34
+          cmdline-tools-version: 'latest'
+          accept-licenses: true
       
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -93,18 +92,18 @@ jobs:
     name: Lint & Security
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v4
       - name: Set up JDK 17
-        uses: actions/setup-java@v4.3.0
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
       - name: Setup Android SDK
-        run: |
-          echo "ANDROID_HOME=/usr/lib/android-sdk" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=/usr/lib/android-sdk" >> $GITHUB_ENV
-          /usr/lib/android-sdk/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-34"
-          yes | /usr/lib/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 34
+          cmdline-tools-version: 'latest'
+          accept-licenses: true
       - name: Make gradlew executable
         run: chmod +x ./gradlew
       - name: Run Lint
