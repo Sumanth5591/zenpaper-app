@@ -1,5 +1,7 @@
 package com.zenpaper
 
+import kotlin.Suppress
+
 import android.app.WallpaperManager
 import android.content.ContentValues
 import android.content.Context
@@ -15,12 +17,14 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.IOException
 import java.lang.reflect.Type
 import java.util.concurrent.TimeUnit
@@ -28,9 +32,11 @@ import java.util.concurrent.TimeUnit
 object WallpaperController {
     private const val TAG = "WallpaperController"
     
-    // Allowed domains for SSRF protection
+    // Allowed domains for SSRF protection (exact match + subdomains)
     private val ALLOWED_DOMAINS = setOf(
         "wallhaven.cc",
+        "w.wallhaven.cc",
+        "th.wallhaven.cc",
         "wallwidgy.vercel.app",
         "raw.githubusercontent.com",
         "www.wallwidgy.app"
@@ -116,8 +122,8 @@ object WallpaperController {
             Log.d(TAG, "Fetching from Wallhaven: $urlString")
             
             val jsonResponse = makeGetRequest(urlString)
-            val jsonObject = gson.fromJson(jsonResponse, jsonType)
-            val dataArray = jsonObject["data"] as? List<*> ?: emptyList()
+            val jsonObject = gson.fromJson<MutableMap<String, Any>>(jsonResponse, jsonType)
+            val dataArray = jsonObject["data"] as? List<Any> ?: emptyList()
             if (dataArray.isEmpty()) {
                 throw Exception("No wallpapers found on Wallhaven for query: $fullQuery")
             }
@@ -157,8 +163,8 @@ object WallpaperController {
 
                 Log.d(TAG, "Fetching from ZenPaper API: $urlString")
                 val jsonResponse = makeGetRequest(urlString)
-                val jsonObject = gson.fromJson(jsonResponse, jsonType)
-                val wallpapersArray = jsonObject["wallpapers"] as? List<*> ?: emptyList()
+                val jsonObject = gson.fromJson<MutableMap<String, Any>>(jsonResponse, jsonType)
+                val wallpapersArray = jsonObject["wallpapers"] as? List<Any> ?: emptyList()
                 if (wallpapersArray.isEmpty()) {
                     throw Exception("No wallpapers found matching filters")
                 }
@@ -228,24 +234,37 @@ object WallpaperController {
         }
     }
 
-    private fun validateAndParseUrl(urlString: String): okhttp3.HttpUrl {
-        val parsedUrl = okhttp3.HttpUrl.parse(urlString) 
-            ?: throw IllegalArgumentException("Invalid URL format: $urlString")
+    private fun validateAndParseUrl(urlString: String): HttpUrl {
+        // Parse URL using java.net.URL first, then construct HttpUrl
+        val url = java.net.URL(urlString)
+        val httpUrl = HttpUrl.Builder()
+            .scheme(url.protocol)
+            .host(url.host)
+            .port(url.port)
+            .encodedPath(url.path)
+            .encodedQuery(url.query)
+            .encodedFragment(url.ref)
+            .build()
         
-        val host = parsedUrl.host()
+        if (httpUrl == null) {
+            throw IllegalArgumentException("Invalid URL format: $urlString")
+        }
+        
+        val host = httpUrl.host
         if (!ALLOWED_DOMAINS.contains(host)) {
             throw SecurityException("Domain not allowed: $host. Allowed: $ALLOWED_DOMAINS")
         }
         
-        if (parsedUrl.scheme() != "https") {
+        if (httpUrl.scheme != "https") {
             throw SecurityException("Only HTTPS URLs are allowed: $urlString")
         }
         
-        return parsedUrl
+        return httpUrl
     }
 
     private suspend fun downloadHighResImage(slug: String): Pair<ByteArray, String> = withContext(Dispatchers.IO) {
         val extensions = listOf("png", "jpg", "jpeg", "webp")
+        
         for (ext in extensions) {
             val urlString = "https://raw.githubusercontent.com/not-ayan/storage/main/main/$slug.$ext"
             try {
@@ -253,7 +272,7 @@ object WallpaperController {
                 val bytes = downloadImageBytes(urlString)
                 if (bytes.isNotEmpty()) {
                     Log.d(TAG, "Successfully downloaded high-res image: $urlString")
-                    return Pair(bytes, ext)
+                    return@withContext Pair(bytes, ext)
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Failed download for $urlString: ${e.message}")
@@ -263,7 +282,7 @@ object WallpaperController {
         // Fallback to cache webp
         val fallbackUrl = "https://raw.githubusercontent.com/not-ayan/storage/main/cache/$slug.webp"
         Log.d(TAG, "Falling back to cache webp: $fallbackUrl")
-        return Pair(downloadImageBytes(fallbackUrl), "webp")
+        Pair(downloadImageBytes(fallbackUrl), "webp")
     }
 
     private fun processImageToFitScreen(context: Context, imageBytes: ByteArray, extension: String): ByteArray {

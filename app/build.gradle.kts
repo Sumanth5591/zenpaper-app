@@ -80,9 +80,11 @@ android {
     
     kotlin {
         jvmToolchain(17)
-        // Kotlin 2.0 + Gradle 9.0: set jvmTarget here instead of tasks.withType
-        compilerOptions {
-            jvmTarget.set("17")
+    }
+    // Kotlin 2.0 + Gradle 8.13: set jvmTarget via tasks
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class.java).configureEach {
+        kotlinOptions {
+            jvmTarget = "17"
         }
     }
     buildFeatures {
