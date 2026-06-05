@@ -11,14 +11,41 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
-import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
+import java.io.IOException
+import java.lang.reflect.Type
+import java.util.concurrent.TimeUnit
 
 object WallpaperController {
     private const val TAG = "WallpaperController"
+    
+    // Allowed domains for SSRF protection
+    private val ALLOWED_DOMAINS = setOf(
+        "wallhaven.cc",
+        "wallwidgy.vercel.app",
+        "raw.githubusercontent.com",
+        "www.wallwidgy.app"
+    )
+    
+    // OkHttp client with security config
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
+    
+    private val gson = Gson()
+    private val jsonType = object : TypeToken<Map<String, Any>>() {}.type
     
     // List of pre-screened high-quality spiritual slugs from raw index.json
     val spiritualSlugs = listOf(
@@ -51,7 +78,12 @@ object WallpaperController {
         "cat-creation-art"
     )
 
-    fun executeWallpaperUpdate(context: Context, category: String, color: String, target: String): String {
+    suspend fun executeWallpaperUpdate(
+        context: Context, 
+        category: String, 
+        color: String, 
+        target: String
+    ): String = withContext(Dispatchers.IO) {
         val prefs = context.getSharedPreferences("zenpaper_prefs", Context.MODE_PRIVATE)
         val apiSource = prefs.getString("pref_api_source", "zenpaper") ?: "zenpaper"
 
@@ -66,7 +98,7 @@ object WallpaperController {
             Log.d(TAG, "Wallhaven HD API Source selected")
             
             // Map category to search tags
-            var query = when (category) {
+            val query = when (category) {
                 "minimal" -> "minimalist"
                 "nature" -> "nature"
                 "tech" -> "technology+cyberpunk"
@@ -79,25 +111,22 @@ object WallpaperController {
                 else -> "wallpaper"
             }
 
-            if (color != "all") {
-                query += "+$color"
-            }
-
-            val urlString = "https://wallhaven.cc/api/v1/search?q=$query&sorting=random&purity=100"
+            val fullQuery = if (color != "all") "$query+$color" else query
+            val urlString = "https://wallhaven.cc/api/v1/search?q=$fullQuery&sorting=random&purity=100"
             Log.d(TAG, "Fetching from Wallhaven: $urlString")
             
             val jsonResponse = makeGetRequest(urlString)
-            val jsonObject = org.json.JSONObject(jsonResponse)
-            val dataArray = jsonObject.getJSONArray("data")
-            if (dataArray.length() == 0) {
-                throw Exception("No wallpapers found on Wallhaven for query: $query")
+            val jsonObject = gson.fromJson(jsonResponse, jsonType)
+            val dataArray = jsonObject["data"] as? List<*> ?: emptyList()
+            if (dataArray.isEmpty()) {
+                throw Exception("No wallpapers found on Wallhaven for query: $fullQuery")
             }
 
             // Pick a random wallpaper from results
-            val randomIndex = (0 until dataArray.length()).random()
-            val wallpaperObj = dataArray.getJSONObject(randomIndex)
-            directImageUrl = wallpaperObj.getString("path")
-            originalUrl = wallpaperObj.getString("url")
+            val randomIndex = (0 until dataArray.size).random()
+            val wallpaperObj = dataArray[randomIndex] as Map<String, Any>
+            directImageUrl = wallpaperObj["path"] as String
+            originalUrl = wallpaperObj["url"] as String
             finalExtension = directImageUrl.substringAfterLast(".", "jpg")
             displayUrl = originalUrl
 
@@ -128,13 +157,13 @@ object WallpaperController {
 
                 Log.d(TAG, "Fetching from ZenPaper API: $urlString")
                 val jsonResponse = makeGetRequest(urlString)
-                val jsonObject = org.json.JSONObject(jsonResponse)
-                val wallpapersArray = jsonObject.getJSONArray("wallpapers")
-                if (wallpapersArray.length() == 0) {
+                val jsonObject = gson.fromJson(jsonResponse, jsonType)
+                val wallpapersArray = jsonObject["wallpapers"] as? List<*> ?: emptyList()
+                if (wallpapersArray.isEmpty()) {
                     throw Exception("No wallpapers found matching filters")
                 }
 
-                originalUrl = wallpapersArray.getString(0)
+                originalUrl = wallpapersArray[0] as String
                 displayUrl = originalUrl
                 val slug = originalUrl.substringAfterLast("/")
                 Log.d(TAG, "Clean API URL: $originalUrl, Slug: $slug")
@@ -161,35 +190,61 @@ object WallpaperController {
 
         // Save to recent list
         addRecentWallpaper(context, displayUrl)
-        return displayUrl
+        displayUrl
     }
 
-    private fun makeGetRequest(urlString: String): String {
-        val url = URL(urlString)
-        val connection = url.openConnection() as HttpURLConnection
-        connection.requestMethod = "GET"
-        connection.connectTimeout = 15000
-        connection.readTimeout = 15000
-        connection.doInput = true
-        return connection.inputStream.bufferedReader().use { it.readText() }
-    }
-
-    private fun downloadImageBytes(imageUrlString: String): ByteArray {
-        val url = URL(imageUrlString)
-        val connection = url.openConnection() as HttpURLConnection
-        connection.connectTimeout = 15000
-        connection.readTimeout = 15000
-        connection.doInput = true
+    private suspend fun makeGetRequest(urlString: String): String = withContext(Dispatchers.IO) {
+        // SSRF Protection: validate URL domain
+        val url = validateAndParseUrl(urlString)
         
-        val responseCode = connection.responseCode
-        if (responseCode != HttpURLConnection.HTTP_OK) {
-            throw java.io.IOException("HTTP error code: $responseCode")
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("User-Agent", "ZenPaper/1.0 (Android)")
+            .addHeader("Accept", "application/json")
+            .build()
+
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IOException("HTTP error: ${response.code} ${response.message}")
+            }
+            response.body?.string() ?: throw IOException("Empty response body")
+        }
+    }
+
+    private suspend fun downloadImageBytes(imageUrlString: String): ByteArray = withContext(Dispatchers.IO) {
+        val url = validateAndParseUrl(imageUrlString)
+        
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("User-Agent", "ZenPaper/1.0 (Android)")
+            .addHeader("Accept", "image/*,*/*;q=0.8")
+            .build()
+
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IOException("HTTP error: ${response.code} ${response.message}")
+            }
+            response.body?.bytes() ?: throw IOException("Empty image response")
+        }
+    }
+
+    private fun validateAndParseUrl(urlString: String): okhttp3.HttpUrl {
+        val parsedUrl = okhttp3.HttpUrl.parse(urlString) 
+            ?: throw IllegalArgumentException("Invalid URL format: $urlString")
+        
+        val host = parsedUrl.host()
+        if (!ALLOWED_DOMAINS.contains(host)) {
+            throw SecurityException("Domain not allowed: $host. Allowed: $ALLOWED_DOMAINS")
         }
         
-        return connection.inputStream.use { it.readBytes() }
+        if (parsedUrl.scheme() != "https") {
+            throw SecurityException("Only HTTPS URLs are allowed: $urlString")
+        }
+        
+        return parsedUrl
     }
 
-    private fun downloadHighResImage(slug: String): Pair<ByteArray, String> {
+    private suspend fun downloadHighResImage(slug: String): Pair<ByteArray, String> = withContext(Dispatchers.IO) {
         val extensions = listOf("png", "jpg", "jpeg", "webp")
         for (ext in extensions) {
             val urlString = "https://raw.githubusercontent.com/not-ayan/storage/main/main/$slug.$ext"
@@ -217,13 +272,15 @@ object WallpaperController {
             val fittedBitmap = cropAndScaleBitmapToFitScreen(context, originalBitmap)
             
             val outputStream = ByteArrayOutputStream()
-            val format = if (extension.lowercase() == "png") Bitmap.CompressFormat.PNG 
-                         else if (extension.lowercase() == "webp") Bitmap.CompressFormat.WEBP
-                         else Bitmap.CompressFormat.JPEG
-                         
+            val format = when (extension.lowercase()) {
+                "png" -> Bitmap.CompressFormat.PNG
+                "webp" -> Bitmap.CompressFormat.WEBP
+                else -> Bitmap.CompressFormat.JPEG
+            }
+            
             fittedBitmap.compress(format, 95, outputStream)
             
-            // Clean up resources immediately to save S25 battery and memory
+            // Clean up resources immediately to save battery and memory
             originalBitmap.recycle()
             fittedBitmap.recycle()
             
@@ -261,7 +318,7 @@ object WallpaperController {
         
         Log.d(TAG, "Screen Size: ${screenWidth}x${screenHeight}, Image Size: ${bitmapWidth}x${bitmapHeight}, Cropping to: Start(${startX}, ${startY}), Size(${cropWidth}x${cropHeight})")
         
-        val croppedBitmap = Bitmap.createBitmap(originalBitmap, startX, startY, cropWidth, cropHeight)
+        val croppedBitmap = Bitmap.createBitmap(originalBitmap, startX, startY, cropWidth, cropWidth)
         val scaledBitmap = Bitmap.createScaledBitmap(croppedBitmap, screenWidth, screenHeight, true)
         
         if (croppedBitmap != originalBitmap) {

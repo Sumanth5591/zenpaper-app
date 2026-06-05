@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -10,10 +11,24 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("../zenpaper.jks")
-            storePassword = "zenpaper123"
-            keyAlias = "zenpaper"
-            keyPassword = "zenpaper123"
+            // Load from keystore.properties (NOT committed to git) or environment variables
+            val keystorePropertiesFile = rootProject.file("keystore.properties")
+            if (keystorePropertiesFile.exists()) {
+                val keystoreProperties = java.util.Properties()
+                keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile))
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+            } else if (System.getenv("KEYSTORE_PATH") != null) {
+                // CI/CD environment variables
+                storeFile = file(System.getenv("KEYSTORE_PATH")!!)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")!!
+                keyAlias = System.getenv("KEY_ALIAS")!!
+                keyPassword = System.getenv("KEY_PASSWORD")!!
+            } else {
+                throw GradleException("Keystore configuration not found. Create keystore.properties or set environment variables.")
+            }
         }
     }
 
@@ -32,10 +47,20 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = signingConfigs.getByName("release")
-            isCrunchPngs = false
+            isCrunchPngs = true
+            debuggable = false
+        }
+        debug {
+            isMinifyEnabled = false
+            isShrinkResources = false
+            debuggable = true
         }
     }
 
@@ -67,7 +92,23 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.work.runtime.ktx)
-    
+
+    // Network
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
+
+    // Image loading
+    implementation(libs.coil.compose)
+    implementation(libs.coil.core)
+
+    // Coroutines
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.core)
+
+    // JSON
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.gson)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
