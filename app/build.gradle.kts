@@ -5,29 +5,38 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+import java.io.FileInputStream
+import java.util.Properties
+
 android {
     namespace = "com.zenpaper"
     compileSdk = 34
 
     signingConfigs {
         create("release") {
-            // Load from keystore.properties (NOT committed to git) or environment variables
-            val keystorePropertiesFile = rootProject.file("keystore.properties")
-            if (keystorePropertiesFile.exists()) {
-                val keystoreProperties = java.util.Properties()
-                keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile))
-                storeFile = file(keystoreProperties["storeFile"] as String)
-                storePassword = keystoreProperties["storePassword"] as String
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
-            } else if (System.getenv("KEYSTORE_PATH") != null) {
-                // CI/CD environment variables
-                storeFile = file(System.getenv("KEYSTORE_PATH")!!)
-                storePassword = System.getenv("KEYSTORE_PASSWORD")!!
-                keyAlias = System.getenv("KEY_ALIAS")!!
-                keyPassword = System.getenv("KEY_PASSWORD")!!
-            } else {
-                throw GradleException("Keystore configuration not found. Create keystore.properties or set environment variables.")
+            // Only configure for release builds - skip for debug
+            val isReleaseBuild = (gradle.startParameter.taskNames.any { it.contains("Release") || it.contains("release") }
+                || gradle.startParameter.taskNames.any { it == "bundleRelease" || it == "assembleRelease" })
+            
+            if (isReleaseBuild) {
+                // Load from keystore.properties (NOT committed to git) or environment variables
+                val keystorePropertiesFile = rootProject.file("keystore.properties")
+                if (keystorePropertiesFile.exists()) {
+                    val keystoreProperties = Properties()
+                    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+                    storeFile = file(keystoreProperties["storeFile"] as String)
+                    storePassword = keystoreProperties["storePassword"] as String
+                    keyAlias = keystoreProperties["keyAlias"] as String
+                    keyPassword = keystoreProperties["keyPassword"] as String
+                } else if (System.getenv("KEYSTORE_PATH") != null) {
+                    // CI/CD environment variables
+                    storeFile = file(System.getenv("KEYSTORE_PATH")!!)
+                    storePassword = System.getenv("KEYSTORE_PASSWORD")!!
+                    keyAlias = System.getenv("KEY_ALIAS")!!
+                    keyPassword = System.getenv("KEY_PASSWORD")!!
+                } else {
+                    throw GradleException("Keystore configuration not found. Create keystore.properties or set environment variables.")
+                }
             }
         }
     }
@@ -55,21 +64,22 @@ android {
             )
             signingConfig = signingConfigs.getByName("release")
             isCrunchPngs = true
-            debuggable = false
+            isDebuggable = false
         }
         debug {
             isMinifyEnabled = false
             isShrinkResources = false
-            debuggable = true
+            isDebuggable = true
         }
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "11"
+    
+    kotlin {
+        jvmToolchain(17)
     }
     buildFeatures {
         compose = true
@@ -77,6 +87,12 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+    // Fix for Gradle 9.0 - use compilerOptions instead of deprecated kotlinOptions
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+        kotlinOptions {
+            jvmTarget = "17"
         }
     }
 }
@@ -99,7 +115,7 @@ dependencies {
 
     // Image loading
     implementation(libs.coil.compose)
-    implementation(libs.coil.core)
+    implementation(libs.coil.base)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
