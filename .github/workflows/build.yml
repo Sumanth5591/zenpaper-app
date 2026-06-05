@@ -30,16 +30,18 @@ jobs:
           java-version: '17'
       
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: 'platforms;android-34 build-tools;34.0.0'
-          accept-android-sdk-licenses: true
+        run: |
+          echo "ANDROID_HOME=/usr/lib/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=/usr/lib/android-sdk" >> $GITHUB_ENV
+          # Install required packages
+          /usr/lib/android-sdk/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+          yes | /usr/lib/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
       
       - name: Make gradlew executable
         run: chmod +x ./gradlew
       
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --stacktrace --info
       
       - name: Build Release APK & AAB
         if: env.KEYSTORE_BASE64 != ''
@@ -98,10 +100,11 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: 'platforms;android-34'
-          accept-android-sdk-licenses: true
+        run: |
+          echo "ANDROID_HOME=/usr/lib/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=/usr/lib/android-sdk" >> $GITHUB_ENV
+          /usr/lib/android-sdk/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-34"
+          yes | /usr/lib/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
       - name: Make gradlew executable
         run: chmod +x ./gradlew
       - name: Run Lint
